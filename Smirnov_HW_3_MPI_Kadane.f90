@@ -67,6 +67,9 @@ module smirnov_HW_3_MPI_Kadane
 		m = size(a, dim = 1)
 		n = size(a, dim = 2)
         
+        write(*,*) 'in Kadane'
+        b = a
+        
         if (m < n .and. mpiRank == 0) then
         
             allocate(b(n,m))
@@ -75,44 +78,55 @@ module smirnov_HW_3_MPI_Kadane
             m = n
             n = k
             
+            write(*,*) 'I am', mpiRank, 'transposing'
+            
             call mpi_bcast(b, m*n, MPI_REAL8, 0, MPI_COMM_WORLD, mpiErr)
             call mpi_bcast(m, 1, MPI_INTEGER4, 0, MPI_COMM_WORLD, mpiErr)
             call mpi_bcast(n, 1, MPI_INTEGER4, 0, MPI_COMM_WORLD, mpiErr)
         
         endif
-		
+        
 		allocate(maximum_S(0:m/mpiSize))
 		allocate(maximum_L(0:m/mpiSize))
 		allocate(maximum_R(0:m/mpiSize))
 		allocate(maximum_B(0:m/mpiSize))
         
+        write(*,*) 'Allocated, size', m/mpiSize
+        
         if (mpiRank == 0) then
         
-            allocate(Global_maximum_S(m/mpiSize + 1))
-            allocate(Global_maximum_L(m/mpiSize + 1))
-            allocate(Global_maximum_R(m/mpiSize + 1))
-            allocate(Global_maximum_B(m/mpiSize + 1))
+            allocate(Global_maximum_S((m/mpiSize + 1)*mpiSize))
+            allocate(Global_maximum_L((m/mpiSize + 1)*mpiSize))
+            allocate(Global_maximum_R((m/mpiSize + 1)*mpiSize))
+            allocate(Global_maximum_B((m/mpiSize + 1)*mpiSize))
+            write(*,*) 'Allocated, with ',mpiRank, 'size is', (m/mpiSize + 1)*mpiSize
         
         endif
         
         maximum_S = -1e-38
 				
 		allocate(p(n))
+        
 
 		
 		do i = 1, m
+!        write(*,*) 'checking if', mod(i, mpiSize), '=?', mpiRank
             
-            if (mod(i, mpiSize) == mpiSize) then
+            if (mod(i, mpiSize) == mpiRank) then
 
                 p = 0
             
                 do j = i, m
             
                     do k = 1,n
+                    
                         p(k) = p(k) + b(j, k)
+                        
                     enddo
-				
+                    
                     call Kande(p, left, right, CurrentSum)
+                    
+                    write(*,*) 'in cycle, iteration number i = ', i, 'j = ', j, 'thread', mpiRank
     
                     if (CurrentSum  >  maximum_S( (i - 1)/mpiSize) .or. i == j) then
                 
@@ -129,12 +143,16 @@ module smirnov_HW_3_MPI_Kadane
             
 		enddo
         
-        if (mpiRank == 0) then
+                write(*,*) 'end'
+        
+!        if (mpiRank == 0) then
+            write(*,*) 'here thread ',mpiRank 
             
             do i = 1, m/mpiSize + 1
-            
+            write(*,*) 'here'
                 call mpi_gather(maximum_S(i - 1), 1, MPI_REAL8, Global_maximum_S((i-1)*mpiSize+1:i*mpiSize), &
                     &mpiSize, MPI_REAL8, 0, MPI_COMM_WORLD, mpiErr)
+            write(*,*) 'here we go again'
                 call mpi_gather(maximum_L(i - 1), 1, MPI_INTEGER4, Global_maximum_L((i-1)*mpiSize+1:i*mpiSize), &
                     &mpiSize, MPI_INTEGER, 0, MPI_COMM_WORLD, mpiErr)
                 call mpi_gather(maximum_R(i - 1), 1, MPI_INTEGER4, Global_maximum_R((i-1)*mpiSize+1:i*mpiSize), &
@@ -144,7 +162,7 @@ module smirnov_HW_3_MPI_Kadane
             
             enddo
          
-         endif  
+!         endif  
 
 		deallocate(p)
         
