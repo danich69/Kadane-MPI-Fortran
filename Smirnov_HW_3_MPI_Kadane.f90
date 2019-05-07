@@ -1,4 +1,5 @@
-module Smirnov_Hw_1_OpenMP
+module smirnov_HW_3_MPI_Kadane
+    use :: mpi
     implicit none
     contains
 
@@ -44,78 +45,129 @@ module Smirnov_Hw_1_OpenMP
 
 	subroutine GetMaxCoordinates(a, x1, y1, x2, y2)
 
-		real(8), intent(in), dimension(:,:) :: A
+		real(8), intent(in), dimension(:,:) :: a
 		integer(4), intent(out) :: x1, y1, x2, y2
 		
+		real(8), dimension(:,:), allocatable :: b
 		real(8), dimension(:), allocatable :: maximum_S
+		real(8), dimension(:), allocatable :: Global_maximum_S
 		real(8), dimension(:), allocatable :: p
 		real(8) :: maximum, CurrentSum
 		
+		integer(4), dimension(:), allocatable :: Global_maximum_L, Global_maximum_R, Global_maximum_B
 		integer(4), dimension(:), allocatable :: maximum_L, maximum_R, maximum_B
-		integer(4) :: left, right, top, bottom, m, n, j
+		integer(4) :: left, right, i, j, m, n, k
+        integer(4) :: mpiErr, mpiSize, mpiRank
+        
+        call mpi_init(mpiErr)
+        
+        call mpi_comm_size(MPI_COMM_WORLD, mpiSize, mpiErr)
+        call mpi_comm_rank(MPI_COMM_WORLD, mpiRank, mpiErr)
 
 		m = size(a, dim = 1)
 		n = size(a, dim = 2)
+        
+        if (m < n .and. mpiRank == 0) then
+        
+            allocate(b(n,m))
+            b = transpose(a)
+            m = k
+            m = n
+            n = k
+            
+            call mpi_bcast(b, m*n, MPI_REAL8, 0, MPI_COMM_WORLD, mpiErr)
+            call mpi_bcast(m, 1, MPI_INTEGER4, 0, MPI_COMM_WORLD, mpiErr)
+            call mpi_bcast(n, 1, MPI_INTEGER4, 0, MPI_COMM_WORLD, mpiErr)
+        
+        endif
 		
-		allocate(maximum_S(m))
-		allocate(maximum_L(m))
-		allocate(maximum_R(m))
-		allocate(maximum_B(m))
+		allocate(maximum_S(0:m/mpiSize))
+		allocate(maximum_L(0:m/mpiSize))
+		allocate(maximum_R(0:m/mpiSize))
+		allocate(maximum_B(0:m/mpiSize))
+        
+        if (mpiRank == 0) then
+        
+            allocate(Global_maximum_S(m/mpiSize + 1))
+            allocate(Global_maximum_L(m/mpiSize + 1))
+            allocate(Global_maximum_R(m/mpiSize + 1))
+            allocate(Global_maximum_B(m/mpiSize + 1))
+        
+        endif
+        
+        maximum_S = -1e-38
 				
 		allocate(p(n))
 
 		
-		do top = 1, m
-        
-			p = 0
+		do i = 1, m
             
-			do bottom = top, m
+            if (mod(i, mpiSize) == mpiSize) then
+
+                p = 0
             
-				do j = 1,n
-					p(j) = p(j) + a(bottom, j)
-				enddo
+                do j = i, m
+            
+                    do k = 1,n
+                        p(k) = p(k) + b(j, k)
+                    enddo
 				
-				call Kande(p, left, right, CurrentSum)
+                    call Kande(p, left, right, CurrentSum)
     
-				if (CurrentSum  >  maximum_S(top) .or. top == bottom) then
-					maximum_S(top) = CurrentSum;
-					maximum_L(top) = left
-					maximum_R(top) = right
-					maximum_B(top) = bottom
-				endif
+                    if (CurrentSum  >  maximum_S( (i - 1)/mpiSize) .or. i == j) then
                 
-			enddo
+                        maximum_S( (i - 1)/mpiSize ) = CurrentSum;
+                        maximum_L( (i - 1)/mpiSize ) = left
+                        maximum_R( (i - 1)/mpiSize ) = right
+                        maximum_B( (i - 1)/mpiSize ) = j
+                    
+                    endif
+                
+                enddo
+                
+            endif
             
 		enddo
-		
+        
+        if (mpiRank == 0) then
+            
+            do i = 1, m/mpiSize + 1
+            
+                call mpi_gather(maximum_S(i - 1), 1, MPI_REAL8, Global_maximum_S((i-1)*mpiSize+1:i*mpiSize), &
+                    &mpiSize, MPI_REAL8, 0, MPI_COMM_WORLD, mpiErr)
+                call mpi_gather(maximum_L(i - 1), 1, MPI_INTEGER4, Global_maximum_L((i-1)*mpiSize+1:i*mpiSize), &
+                    &mpiSize, MPI_INTEGER, 0, MPI_COMM_WORLD, mpiErr)
+                call mpi_gather(maximum_R(i - 1), 1, MPI_INTEGER4, Global_maximum_R((i-1)*mpiSize+1:i*mpiSize), &
+                    &mpiSize, MPI_INTEGER, 0, MPI_COMM_WORLD, mpiErr)
+                call mpi_gather(maximum_B(i - 1), 1, MPI_INTEGER4, Global_maximum_B((i-1)*mpiSize+1:i*mpiSize), &
+                    &mpiSize, MPI_INTEGER, 0, MPI_COMM_WORLD, mpiErr)
+            
+            enddo
+         
+         endif  
 
 		deallocate(p)
-
-
-		maximum = maximum_S(1)
-		x1 = 1
-		y1 = maximum_L(1)
-		x2 = maximum_B(1)
-		y2 = maximum_R(1)
-		
-		do j = 2, m
         
-			if (maximum_S(j)  >  maximum) then
-		
-        		maximum = maximum_S(j)
-				x1 = j
-				y1 = maximum_L(j)
-				x2 = maximum_B(j)
-				y2 = maximum_R(j)
-		
-            endif
-		
-        enddo
+        if (mpiRank == 0) then
 
+            x1 = maxloc(Global_maximum_S, dim = 1)
+            y1 = Global_maximum_L(x1)
+            x2 = Global_maximum_B(x1)
+            y2 = Global_maximum_R(x1)
+            
+            deallocate(Global_maximum_S)
+            deallocate(Global_maximum_L)
+            deallocate(Global_maximum_R)
+            deallocate(Global_maximum_B)
+            
+        endif
+		
 		deallocate(maximum_S)
 		deallocate(maximum_L)
 		deallocate(maximum_R)
 		deallocate(maximum_B)
+
+        call mpi_finalize(mpiErr)
 
 	end subroutine
 
