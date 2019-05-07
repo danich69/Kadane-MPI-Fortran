@@ -1,4 +1,5 @@
-module Smirnov_Hw_1_OpenMP
+module smirnov_HW_3_MPI_Kadane
+    use :: mpi
     implicit none
     contains
 
@@ -44,9 +45,10 @@ module Smirnov_Hw_1_OpenMP
 
 	subroutine GetMaxCoordinates(a, x1, y1, x2, y2)
 
-		real(8), intent(in), dimension(:,:) :: A
+		real(8), intent(in), dimension(:,:) :: a
 		integer(4), intent(out) :: x1, y1, x2, y2
 		
+		real(8), dimension(:,:), allocatable :: b
 		real(8), dimension(:), allocatable :: maximum_S
 		real(8), dimension(:), allocatable :: Global_maximum_S
 		real(8), dimension(:), allocatable :: p
@@ -57,6 +59,8 @@ module Smirnov_Hw_1_OpenMP
 		integer(4) :: left, right, i, j, m, n, k
         integer(4) :: mpiErr, mpiSize, mpiRank
         
+        call mpi_init(mpiErr)
+        
         call mpi_comm_size(MPI_COMM_WORLD, mpiSize, mpiErr)
         call mpi_comm_rank(MPI_COMM_WORLD, mpiRank, mpiErr)
 
@@ -65,12 +69,13 @@ module Smirnov_Hw_1_OpenMP
         
         if (m < n .and. mpiRank == 0) then
         
-            A = transpose(A)
+            allocate(b(n,m))
+            b = transpose(a)
             m = k
             m = n
             n = k
             
-            call mpi_bcast(A, m*n, MPI_REAL8, 0, MPI_COMM_WORLD, mpiErr)
+            call mpi_bcast(b, m*n, MPI_REAL8, 0, MPI_COMM_WORLD, mpiErr)
             call mpi_bcast(m, 1, MPI_INTEGER4, 0, MPI_COMM_WORLD, mpiErr)
             call mpi_bcast(n, 1, MPI_INTEGER4, 0, MPI_COMM_WORLD, mpiErr)
         
@@ -104,7 +109,7 @@ module Smirnov_Hw_1_OpenMP
                 do j = i, m
             
                     do k = 1,n
-                        p(k) = p(k) + a(j, k)
+                        p(k) = p(k) + b(j, k)
                     enddo
 				
                     call Kande(p, left, right, CurrentSum)
@@ -128,14 +133,18 @@ module Smirnov_Hw_1_OpenMP
             
             do i = 1, m/mpiSize + 1
             
-                call mpi_gather(maximum_S(i - 1), 1, MPI_REAL8, Global_maximum_S((i-1)*mpiSize+1:i*mpiSize), mpiSize, MPI_REAL8, 0, MPI_COMM_WORLD, mpiErr)
-                call mpi_gather(maximum_L(i - 1), 1, MPI_INTEGER4, Global_maximum_L((i-1)*mpiSize+1:i*mpiSize), mpiSize, MPI_INTEGER4, 0, MPI_COMM_WORLD, mpiErr)
-                call mpi_gather(maximum_R(i - 1), 1, MPI_INTEGER4, Global_maximum_L((i-1)*mpiSize+1:i*mpiSize), mpiSize, MPI_INTEGER4, 0, MPI_COMM_WORLD, mpiErr)
-                call mpi_gather(maximum_B(i - 1), 1, MPI_INTEGER4, Global_maximum_L((i-1)*mpiSize+1:i*mpiSize), mpiSize, MPI_INTEGER4, 0, MPI_COMM_WORLD, mpiErr)
+                call mpi_gather(maximum_S(i - 1), 1, MPI_REAL8, Global_maximum_S((i-1)*mpiSize+1:i*mpiSize), &
+                    &mpiSize, MPI_REAL8, 0, MPI_COMM_WORLD, mpiErr)
+                call mpi_gather(maximum_L(i - 1), 1, MPI_INTEGER4, Global_maximum_L((i-1)*mpiSize+1:i*mpiSize), &
+                    &mpiSize, MPI_INTEGER, 0, MPI_COMM_WORLD, mpiErr)
+                call mpi_gather(maximum_R(i - 1), 1, MPI_INTEGER4, Global_maximum_R((i-1)*mpiSize+1:i*mpiSize), &
+                    &mpiSize, MPI_INTEGER, 0, MPI_COMM_WORLD, mpiErr)
+                call mpi_gather(maximum_B(i - 1), 1, MPI_INTEGER4, Global_maximum_B((i-1)*mpiSize+1:i*mpiSize), &
+                    &mpiSize, MPI_INTEGER, 0, MPI_COMM_WORLD, mpiErr)
             
             enddo
-            
-        call 		
+         
+         endif  
 
 		deallocate(p)
         
@@ -151,13 +160,14 @@ module Smirnov_Hw_1_OpenMP
             deallocate(Global_maximum_R)
             deallocate(Global_maximum_B)
             
-        enddo
+        endif
 		
 		deallocate(maximum_S)
 		deallocate(maximum_L)
 		deallocate(maximum_R)
 		deallocate(maximum_B)
 
+        call mpi_finalize(mpiErr)
 
 	end subroutine
 
