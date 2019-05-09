@@ -66,7 +66,7 @@ module smirnov_HW_3_MPI_Kadane
 		m = size(a, dim = 1)
 		n = size(a, dim = 2)
         
-!        write(*,*) 'in Kadane'
+!        write(*,*) 'Rank is', mpiRank
         b = a
         
         if (m < n .and. mpiRank == 0) then
@@ -85,10 +85,10 @@ module smirnov_HW_3_MPI_Kadane
         
         endif
         
-		allocate(maximum_S(0:m/mpiSize-1))
-		allocate(maximum_L(0:m/mpiSize-1))
-		allocate(maximum_R(0:m/mpiSize-1))
-		allocate(maximum_B(0:m/mpiSize-1))
+		allocate(maximum_S(0:m/mpiSize))
+		allocate(maximum_L(0:m/mpiSize))
+		allocate(maximum_R(0:m/mpiSize))
+		allocate(maximum_B(0:m/mpiSize))
         
 !        write(*,*) 'Allocated, size', m/mpiSize
         
@@ -136,7 +136,7 @@ module smirnov_HW_3_MPI_Kadane
             
 		enddo
         
-!        x1 = mpiSize*(maxloc(maximum_S, dim = 1) - 1) + mpiRank
+        x1 = mpiSize*(maxloc(maximum_S, dim = 1) - 1) + mpiRank
         x1 = maxloc(maximum_S, dim = 1) - 1
 !        write(*,*) maximum_S, mpiRank
 !        write(*,*) maximum_B, mpiRank
@@ -148,18 +148,18 @@ module smirnov_HW_3_MPI_Kadane
         x1 = mpiSize*x1 + mpiRank + 1
         maximum = maxval(maximum_S(:))
         
-        call cpu_time(t2)
+!        call cpu_time(t2)
         
-        write(*,*) 'I am', mpiRank, 'my time is', t2-t1
-        write(*,*)
+!        write(*,*) 'I am', mpiRank, 'my time is', t2-t1
+!        write(*,*)
 !        write(*,*) x1!, x2, y1, y2
         
 !        do i = 1, m/mpiSize + 1
-        call cpu_time(t1)    
+!        call cpu_time(t1)    
         call mpi_gather(maximum, 1, MPI_REAL8, Global_maximum_S, &
                     &1, MPI_REAL8, 0, MPI_COMM_WORLD, mpiErr)
-        call cpu_time(t2)            
-        write(*,*) 'I am', mpiRank, 'gather time is', t2-t1
+!        call cpu_time(t2)            
+!        write(*,*) 'I am', mpiRank, 'gather time is', t2-t1
 !                call mpi_gather(maximum_L(i - 1), 1, MPI_INTEGER4, Global_maximum_L((i-1)*mpiSize+1:i*mpiSize), &
 !                    &1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpiErr)
 !                call mpi_gather(maximum_R(i - 1), 1, MPI_INTEGER4, Global_maximum_R((i-1)*mpiSize+1:i*mpiSize), &
@@ -177,14 +177,13 @@ module smirnov_HW_3_MPI_Kadane
 !        if (mpiRank == 1) then
 !!        write(*,*) 'i am the 1st thread my max_s', maximum_S
 !        endif
-		deallocate(p)
+		deallocate(p) 
         
         if (mpiRank == 0) then
             
 !            write(*,*) Global_maximum_S
             i = maxloc(Global_maximum_S(0:mpiSize), dim = 1) - 1
-!            write(*,*) i
-            deallocate(Global_maximum_S)
+!            write(*,*) i, Global_maximum_S(i)
             
         endif
         
@@ -195,11 +194,21 @@ module smirnov_HW_3_MPI_Kadane
         call mpi_bcast(x2, 1, MPI_INTEGER4, i, MPI_COMM_WORLD, mpiErr)
         call mpi_bcast(y1, 1, MPI_INTEGER4, i, MPI_COMM_WORLD, mpiErr)
         call mpi_bcast(y2, 1, MPI_INTEGER4, i, MPI_COMM_WORLD, mpiErr)
-		
+!        write(*,*) 'here', mpiRank
+!        write(*,*) maximum_S
 		deallocate(maximum_S)
+!        write(*,*) 'S', mpiRank
 		deallocate(maximum_L)
+!        write(*,*) 'L', mpiRank
 		deallocate(maximum_R)
+!        write(*,*) 'R', mpiRank
 		deallocate(maximum_B)
+!        write(*,*) 'B', mpiRank
+        if (mpiRank == 0) then
+            
+            deallocate(Global_maximum_S)
+            
+        endif
 
         call mpi_finalize(mpiErr)
 
