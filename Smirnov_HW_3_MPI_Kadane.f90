@@ -3,7 +3,7 @@ module smirnov_HW_3_MPI_Kadane
     implicit none
     contains
 
-	subroutine Kande(a, x1, x2, summary)
+	subroutine Kande(a, x1, x2, summary)                                                                ! 1D Kadane algorythm
 	
 		real(8), intent(in), dimension(:) :: a
 		integer(4), intent(out) :: x1, x2	
@@ -43,33 +43,32 @@ module smirnov_HW_3_MPI_Kadane
 	end subroutine
 
 
-	subroutine GetMaxCoordinates(a, x1, y1, x2, y2)
+	subroutine GetMaxCoordinates(a, x1, y1, x2, y2)                                                       ! a - input matrix; x1, y1 - lower coordinates of submatrix; x2, y2 - upper coordinates of submatrix
 
 		real(8), intent(in), dimension(:,:) :: a
 		integer(4), intent(out) :: x1, y1, x2, y2
 		
-		real(8), dimension(:,:), allocatable :: b
-		real(8), dimension(:), allocatable :: maximum_S
-		real(8), dimension(:), allocatable :: Global_maximum_S
-		real(8), dimension(:), allocatable :: p
-		real(8) :: maximum, CurrentSum, t2, t1
+		real(8), dimension(:,:), allocatable :: b                                                         ! auxiliary matrix
+		real(8), dimension(:), allocatable :: maximum_S                                                   ! array of maximum sums started at i-th row 
+		real(8), dimension(:), allocatable :: Global_maximum_S                                            ! array of maximum sums calculated by i-th thread
+		real(8), dimension(:), allocatable :: p                                                           ! array of column inner sums
+		real(8) :: maximum, CurrentSum
 		
-		integer(4), dimension(:), allocatable :: maximum_L, maximum_R, maximum_B
-		integer(4) :: left, right, i, j, m, n, k
-        integer(4) :: mpiErr, mpiSize, mpiRank
+		integer(4), dimension(:), allocatable :: maximum_L, maximum_R, maximum_B                          ! array of left, right, bottom coordinates of submatrixes with maximum sums started at i-th row
+		integer(4) :: left, right                                                                         ! coordinates of maximum subarray of p 
+		integer(4) :: i, j, m, n, k                                                                       ! indexes; m, n - matrix sizes
+        integer(4) :: mpiErr, mpiSize, mpiRank                                                            ! mpiErr - error at MPI functions, mpiRank - this thread number, mpiSize - number of threads
         
         call mpi_init(mpiErr)
         
-        call mpi_comm_size(MPI_COMM_WORLD, mpiSize, mpiErr)
-        call mpi_comm_rank(MPI_COMM_WORLD, mpiRank, mpiErr)
+        call mpi_comm_size(MPI_COMM_WORLD, mpiSize, mpiErr)                                               ! get number of threads
+        call mpi_comm_rank(MPI_COMM_WORLD, mpiRank, mpiErr)                                               ! get this thread rank
 
 		m = size(a, dim = 1)
 		n = size(a, dim = 2)
-        
-!        write(*,*) 'Rank is', mpiRank
         b = a
         
-        if (m < n .and. mpiRank == 0) then
+        if (m < n .and. mpiRank == 0) then                                                                ! transpose a if needed
         
             allocate(b(n,m))
             b = transpose(a)
@@ -77,133 +76,91 @@ module smirnov_HW_3_MPI_Kadane
             m = n
             n = k
             
-!            write(*,*) 'I am', mpiRank, 'transposing'
+            if(mpiSize > 1)
             
-            call mpi_bcast(b, m*n, MPI_REAL8, 0, MPI_COMM_WORLD, mpiErr)
-            call mpi_bcast(m, 1, MPI_INTEGER4, 0, MPI_COMM_WORLD, mpiErr)
-            call mpi_bcast(n, 1, MPI_INTEGER4, 0, MPI_COMM_WORLD, mpiErr)
+                call mpi_bcast(b, m*n, MPI_REAL8, 0, MPI_COMM_WORLD, mpiErr)
+                call mpi_bcast(m, 1, MPI_INTEGER4, 0, MPI_COMM_WORLD, mpiErr)
+                call mpi_bcast(n, 1, MPI_INTEGER4, 0, MPI_COMM_WORLD, mpiErr)
+            
+            endif
         
         endif
         
-		allocate(maximum_S(0:m/mpiSize))
+		allocate(maximum_S(0:m/mpiSize))                                                                  ! array allocations
 		allocate(maximum_L(0:m/mpiSize))
 		allocate(maximum_R(0:m/mpiSize))
 		allocate(maximum_B(0:m/mpiSize))
-        
-!        write(*,*) 'Allocated, size', m/mpiSize
-        
+                
         if (mpiRank == 0) then
         
             allocate(Global_maximum_S(0:mpiSize-1))
-!            write(*,*) 'Allocated, with ',mpiRank, 'size is', (m/mpiSize + 1)*mpiSize
         
         endif
         
         maximum_S = -1e-38
 				
 		allocate(p(n))
-		
-        call cpu_time(t1)
         
-		do i = mpiRank, m-1, mpiSize
-            
-!            if (mod(i, mpiSize) == mpiRank) then
+		do i = mpiRank, m-1, mpiSize                                                                      ! main body of algorythm
 
-                p = 0
+            p = 0
             
-                do j = i + 1, m
+            do j = i + 1, m
             
-                    do k = 1,n
+                do k = 1,n
                     
-                        p(k) = p(k) + b(j, k)
+                    p(k) = p(k) + b(j, k)
                         
-                    enddo
-                    
-                    call Kande(p, left, right, CurrentSum)
-    
-                    if (CurrentSum  >  maximum_S( (i)/mpiSize) .or. i + 1 == j) then
-                
-                        maximum_S( (i)/mpiSize ) = CurrentSum;
-                        maximum_L( (i)/mpiSize ) = left
-                        maximum_R( (i)/mpiSize ) = right
-                        maximum_B( (i)/mpiSize ) = j
-                    
-                    endif
-                
                 enddo
+                    
+                call Kande(p, left, right, CurrentSum)
+    
+                if (CurrentSum  >  maximum_S( (i)/mpiSize) .or. i + 1 == j) then
                 
-!            endif
+                    maximum_S( (i)/mpiSize ) = CurrentSum;
+                    maximum_L( (i)/mpiSize ) = left
+                    maximum_R( (i)/mpiSize ) = right
+                    maximum_B( (i)/mpiSize ) = j
+                    
+                endif
+                
+            enddo
             
 		enddo
         
-        x1 = mpiSize*(maxloc(maximum_S, dim = 1) - 1) + mpiRank
-        x1 = maxloc(maximum_S, dim = 1) - 1
-!        write(*,*) maximum_S, mpiRank
-!        write(*,*) maximum_B, mpiRank
-!        write(*,*) maximum_L, mpiRank
-!        write(*,*) maximum_R, mpiRank
+        x1 = maxloc(maximum_S, dim = 1) - 1                                                               ! find coords of maximum sum in this thread
         x2 = maximum_B(x1)
         y2 = maximum_R(x1)
         y1 = maximum_L(x1)
         x1 = mpiSize*x1 + mpiRank + 1
-        maximum = maxval(maximum_S(:))
+        maximum = maxval(maximum_S(:))                                                                    ! find maximum sum in this thread
         
-!        call cpu_time(t2)
+        call mpi_gather(maximum, 1, MPI_REAL8, Global_maximum_S, 1, MPI_REAL8, 0, MPI_COMM_WORLD, mpiErr) ! create array of all maximums
         
-!        write(*,*) 'I am', mpiRank, 'my time is', t2-t1
-!        write(*,*)
-!        write(*,*) x1!, x2, y1, y2
-        
-!        do i = 1, m/mpiSize + 1
-!        call cpu_time(t1)    
-        call mpi_gather(maximum, 1, MPI_REAL8, Global_maximum_S, &
-                    &1, MPI_REAL8, 0, MPI_COMM_WORLD, mpiErr)
-!        call cpu_time(t2)            
-!        write(*,*) 'I am', mpiRank, 'gather time is', t2-t1
-!                call mpi_gather(maximum_L(i - 1), 1, MPI_INTEGER4, Global_maximum_L((i-1)*mpiSize+1:i*mpiSize), &
-!                    &1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpiErr)
-!                call mpi_gather(maximum_R(i - 1), 1, MPI_INTEGER4, Global_maximum_R((i-1)*mpiSize+1:i*mpiSize), &
-!                    &1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpiErr)
-!                call mpi_gather(maximum_B(i - 1), 1, MPI_INTEGER4, Global_maximum_B((i-1)*mpiSize+1:i*mpiSize), &
-!                    &1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpiErr)
-            
-!        enddo
-         
-!         endif  
-
-!        if (mpiRank == 0) then
-!        write(*,*) 'i am the 0th thread my max_s', maximum_S
-!        endif
-!        if (mpiRank == 1) then
-!!        write(*,*) 'i am the 1st thread my max_s', maximum_S
-!        endif
 		deallocate(p) 
         
         if (mpiRank == 0) then
             
-!            write(*,*) Global_maximum_S
-            i = maxloc(Global_maximum_S(0:mpiSize), dim = 1) - 1
-!            write(*,*) i, Global_maximum_S(i)
+            i = maxloc(Global_maximum_S(0:mpiSize), dim = 1) - 1                                          ! find thread with maximum sum
             
         endif
         
-        call mpi_bcast(i, 1, MPI_INTEGER4, 0, MPI_COMM_WORLD, mpiErr)
+        if(mpiSize > 1) then                                                                              ! no need to broadcast if there is 1 thread
+            
+            call mpi_bcast(i, 1, MPI_INTEGER4, 0, MPI_COMM_WORLD, mpiErr)                                 ! inform other threads about it
+                
+            call mpi_bcast(x1, 1, MPI_INTEGER4, i, MPI_COMM_WORLD, mpiErr)                                ! send answer to all threads
+            call mpi_bcast(x2, 1, MPI_INTEGER4, i, MPI_COMM_WORLD, mpiErr)
+            call mpi_bcast(y1, 1, MPI_INTEGER4, i, MPI_COMM_WORLD, mpiErr)
+            call mpi_bcast(y2, 1, MPI_INTEGER4, i, MPI_COMM_WORLD, mpiErr)
         
-        
-        call mpi_bcast(x1, 1, MPI_INTEGER4, i, MPI_COMM_WORLD, mpiErr)
-        call mpi_bcast(x2, 1, MPI_INTEGER4, i, MPI_COMM_WORLD, mpiErr)
-        call mpi_bcast(y1, 1, MPI_INTEGER4, i, MPI_COMM_WORLD, mpiErr)
-        call mpi_bcast(y2, 1, MPI_INTEGER4, i, MPI_COMM_WORLD, mpiErr)
-!        write(*,*) 'here', mpiRank
-!        write(*,*) maximum_S
-		deallocate(maximum_S)
-!        write(*,*) 'S', mpiRank
-		deallocate(maximum_L)
-!        write(*,*) 'L', mpiRank
+        endif  
+            
+		deallocate(maximum_S)                                                                             ! deallocation of all arrays  
+        deallocate(maximum_L)
 		deallocate(maximum_R)
-!        write(*,*) 'R', mpiRank
 		deallocate(maximum_B)
-!        write(*,*) 'B', mpiRank
+        
         if (mpiRank == 0) then
             
             deallocate(Global_maximum_S)
