@@ -20,7 +20,6 @@ module smirnov_HW_3_MPI_Kadane
         leftIndex = 1
         
         do i = 2, n
-
             possible_1 = a(i)
             possible_2 = Max_End + a(i)
 
@@ -36,7 +35,6 @@ module smirnov_HW_3_MPI_Kadane
                 x1 = leftIndex
                 x2 = i
             endif
-
         enddo
         
     end subroutine
@@ -59,43 +57,32 @@ module smirnov_HW_3_MPI_Kadane
         integer(4) :: i, j, m, n, k                                                                       ! indexes; m, n - matrix sizes
         integer(4) :: mpiErr, mpiSize, mpiRank                                                            ! mpiErr - error at MPI functions, mpiRank - this thread number, mpiSize - number of threads
         
-        call mpi_init(mpiErr)
-        
         call mpi_comm_size(MPI_COMM_WORLD, mpiSize, mpiErr)                                               ! get number of threads
         call mpi_comm_rank(MPI_COMM_WORLD, mpiRank, mpiErr)                                               ! get this thread rank
         
-        if(maxval(a) < 0) then                                                                                    
-            
-            coords = minloc(a)
+        if(maxval(a) < 0) then
+            coords = maxloc(a)
             x2 = coords(1)
             x1 = coords(1)
             y2 = coords(2)
             y1 = coords(2)
             
-            goto 100
-        
+            return
         endif
 
         m = size(a, dim = 1)
         n = size(a, dim = 2)
-        b = a
         
-        if (m < n .and. mpiRank == 0) then                                                                ! transpose a if needed
-        
+        if (m < n) then                                                                                    ! transpose a if needed
+        write(*,*) 'here'
             allocate(b(n,m))
             b = transpose(a)
             m = k
             m = n
-            n = k
-            
-            if(mpiSize > 1) then
-            
-                call mpi_bcast(b, m*n, MPI_REAL8, 0, MPI_COMM_WORLD, mpiErr)
-                call mpi_bcast(m, 1, MPI_INTEGER4, 0, MPI_COMM_WORLD, mpiErr)
-                call mpi_bcast(n, 1, MPI_INTEGER4, 0, MPI_COMM_WORLD, mpiErr)
-            
-            endif
-        
+            n = k   
+        else
+            allocate(b(m,n))
+            b = a            
         endif
         
         allocate(maximum_S(0:m/mpiSize))                                                                  ! array allocations
@@ -104,40 +91,29 @@ module smirnov_HW_3_MPI_Kadane
         allocate(maximum_B(0:m/mpiSize))
                 
         if (mpiRank == 0) then
-        
             allocate(Global_maximum_S(0:mpiSize-1))
-        
         endif
         
-        maximum_S = -1e-38
+        maximum_S = -1
                 
         allocate(p(n))
         
         do i = mpiRank, m-1, mpiSize                                                                      ! main body of algorythm
-
             p = 0
-            
             do j = i + 1, m
-            
                 do k = 1,n
-                    
                     p(k) = p(k) + b(j, k)
-                        
                 enddo
                     
                 call Kande(p, left, right, CurrentSum)
     
                 if (CurrentSum  >  maximum_S( (i)/mpiSize) .or. i + 1 == j) then
-                
                     maximum_S( (i)/mpiSize ) = CurrentSum;
                     maximum_L( (i)/mpiSize ) = left
                     maximum_R( (i)/mpiSize ) = right
                     maximum_B( (i)/mpiSize ) = j
-                    
                 endif
-                
             enddo
-            
         enddo
         
         x1 = maxloc(maximum_S, dim = 1) - 1                                                               ! find coords of maximum sum in this thread
@@ -152,20 +128,15 @@ module smirnov_HW_3_MPI_Kadane
         deallocate(p) 
         
         if (mpiRank == 0) then
-            
             i = maxloc(Global_maximum_S(0:mpiSize), dim = 1) - 1                                          ! find thread with maximum sum
-            
         endif
         
-        if(mpiSize > 1) then                                                                              ! no need to broadcast if there is 1 thread
-            
-            call mpi_bcast(i, 1, MPI_INTEGER4, 0, MPI_COMM_WORLD, mpiErr)                                 ! inform other threads about it
-                
+        if(mpiSize > 1) then                                                                              ! no need to broadcast if there is only 1 thread
+            call mpi_bcast(i, 1, MPI_INTEGER4, 0, MPI_COMM_WORLD, mpiErr)                                 ! inform other threads about it                
             call mpi_bcast(x1, 1, MPI_INTEGER4, i, MPI_COMM_WORLD, mpiErr)                                ! send answer to all threads
             call mpi_bcast(x2, 1, MPI_INTEGER4, i, MPI_COMM_WORLD, mpiErr)
             call mpi_bcast(y1, 1, MPI_INTEGER4, i, MPI_COMM_WORLD, mpiErr)
             call mpi_bcast(y2, 1, MPI_INTEGER4, i, MPI_COMM_WORLD, mpiErr)
-        
         endif  
             
         deallocate(maximum_S)                                                                             ! deallocation of all arrays  
@@ -174,14 +145,8 @@ module smirnov_HW_3_MPI_Kadane
         deallocate(maximum_B)
         
         if (mpiRank == 0) then
-            
             deallocate(Global_maximum_S)
-            
         endif
-
-        100 continue
-
-        call mpi_finalize(mpiErr)
 
     end subroutine
 
