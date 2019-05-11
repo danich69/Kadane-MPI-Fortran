@@ -3,69 +3,79 @@ module smirnov_HW_3_MPI_Kadane
     implicit none
     contains
 
-	subroutine Kande(a, x1, x2, summary)                                                                ! 1D Kadane algorythm
-	
-		real(8), intent(in), dimension(:) :: a
-		integer(4), intent(out) :: x1, x2	
-		real(8), intent(out) :: summary
-		integer(4) :: i, leftIndex, n, u
-		real(8) :: Max_End, possible_1, possible_2
+    subroutine Kande(a, x1, x2, summary)                                                                ! 1D Kadane algorythm
+    
+        real(8), intent(in), dimension(:) :: a
+        integer(4), intent(out) :: x1, x2    
+        real(8), intent(out) :: summary
+        integer(4) :: i, leftIndex, n, u
+        real(8) :: Max_End, possible_1, possible_2
 
-		n = size(a)
+        n = size(a)
 
-		summary = a(1)
-		x1 = 1
-		x2 = 1
+        summary = a(1)
+        x1 = 1
+        x2 = 1
+        Max_End = a(1)
+        leftIndex = 1
+        
+        do i = 2, n
 
-		Max_End=a(1)
-		leftIndex=1
-		
-		do i=2,n
+            possible_1 = a(i)
+            possible_2 = Max_End + a(i)
 
-			possible_1 = a(i)
-			possible_2 = Max_End + a(i)
+            if (possible_1 > possible_2) then
+                Max_End = possible_1
+                leftIndex = i
+            else
+                Max_End = possible_2
+            endif
 
-			if (possible_1 > possible_2) then
-				Max_End = possible_1
-				leftIndex = i
-			else
-				Max_End = possible_2
-			endif
+            if (Max_End > summary) then
+                summary = Max_End
+                x1 = leftIndex
+                x2 = i
+            endif
 
-			if (Max_End > summary) then
-				summary = Max_End
-				x1 = leftIndex
-				x2 = i
-			endif
-
-		enddo
-		
-	end subroutine
+        enddo
+        
+    end subroutine
 
 
-	subroutine GetMaxCoordinates(a, x1, y1, x2, y2)                                                       ! a - input matrix; x1, y1 - lower coordinates of submatrix; x2, y2 - upper coordinates of submatrix
+    subroutine GetMaxCoordinates(a, x1, y1, x2, y2)                                                       ! a - input matrix; x1, y1 - lower coordinates of submatrix; x2, y2 - upper coordinates of submatrix
 
-		real(8), intent(in), dimension(:,:) :: a
-		integer(4), intent(out) :: x1, y1, x2, y2
-		
-		real(8), dimension(:,:), allocatable :: b                                                         ! auxiliary matrix
-		real(8), dimension(:), allocatable :: maximum_S                                                   ! array of maximum sums started at i-th row 
-		real(8), dimension(:), allocatable :: Global_maximum_S                                            ! array of maximum sums calculated by i-th thread
-		real(8), dimension(:), allocatable :: p                                                           ! array of column inner sums
-		real(8) :: maximum, CurrentSum
-		
-		integer(4), dimension(:), allocatable :: maximum_L, maximum_R, maximum_B                          ! array of left, right, bottom coordinates of submatrixes with maximum sums started at i-th row
-		integer(4) :: left, right                                                                         ! coordinates of maximum subarray of p 
-		integer(4) :: i, j, m, n, k                                                                       ! indexes; m, n - matrix sizes
+        real(8), intent(in), dimension(:,:) :: a
+        integer(4), intent(out) :: x1, y1, x2, y2
+        
+        real(8), dimension(:,:), allocatable :: b                                                         ! auxiliary matrix
+        real(8), dimension(:), allocatable :: maximum_S                                                   ! array of maximum sums started at i-th row 
+        real(8), dimension(:), allocatable :: Global_maximum_S                                            ! array of maximum sums calculated by i-th thread
+        real(8), dimension(:), allocatable :: p                                                           ! array of column inner sums
+        real(8) :: maximum, CurrentSum
+        
+        integer(4), dimension(:), allocatable :: maximum_L, maximum_R, maximum_B                          ! array of left, right, bottom coordinates of submatrixes with maximum sums started at i-th row
+        integer(4) :: left, right                                                                         ! coordinates of maximum subarray of p 
+        integer(4) :: i, j, m, n, k                                                                       ! indexes; m, n - matrix sizes
         integer(4) :: mpiErr, mpiSize, mpiRank                                                            ! mpiErr - error at MPI functions, mpiRank - this thread number, mpiSize - number of threads
         
         call mpi_init(mpiErr)
         
         call mpi_comm_size(MPI_COMM_WORLD, mpiSize, mpiErr)                                               ! get number of threads
         call mpi_comm_rank(MPI_COMM_WORLD, mpiRank, mpiErr)                                               ! get this thread rank
+        
+        if(a < 0) then                                                                                    ! in case a is fulli negative
+            
+            x1 = minloc(a, dim = 1)
+            y1 = minloc(a, dim = 2)
+            x2 = x1
+            y2 = y1
+            
+            goto 100
+        
+        endif
 
-		m = size(a, dim = 1)
-		n = size(a, dim = 2)
+        m = size(a, dim = 1)
+        n = size(a, dim = 2)
         b = a
         
         if (m < n .and. mpiRank == 0) then                                                                ! transpose a if needed
@@ -86,10 +96,10 @@ module smirnov_HW_3_MPI_Kadane
         
         endif
         
-		allocate(maximum_S(0:m/mpiSize))                                                                  ! array allocations
-		allocate(maximum_L(0:m/mpiSize))
-		allocate(maximum_R(0:m/mpiSize))
-		allocate(maximum_B(0:m/mpiSize))
+        allocate(maximum_S(0:m/mpiSize))                                                                  ! array allocations
+        allocate(maximum_L(0:m/mpiSize))
+        allocate(maximum_R(0:m/mpiSize))
+        allocate(maximum_B(0:m/mpiSize))
                 
         if (mpiRank == 0) then
         
@@ -98,10 +108,10 @@ module smirnov_HW_3_MPI_Kadane
         endif
         
         maximum_S = -1e-38
-				
-		allocate(p(n))
+                
+        allocate(p(n))
         
-		do i = mpiRank, m-1, mpiSize                                                                      ! main body of algorythm
+        do i = mpiRank, m-1, mpiSize                                                                      ! main body of algorythm
 
             p = 0
             
@@ -126,7 +136,7 @@ module smirnov_HW_3_MPI_Kadane
                 
             enddo
             
-		enddo
+        enddo
         
         x1 = maxloc(maximum_S, dim = 1) - 1                                                               ! find coords of maximum sum in this thread
         x2 = maximum_B(x1)
@@ -137,7 +147,7 @@ module smirnov_HW_3_MPI_Kadane
         
         call mpi_gather(maximum, 1, MPI_REAL8, Global_maximum_S, 1, MPI_REAL8, 0, MPI_COMM_WORLD, mpiErr) ! create array of all maximums
         
-		deallocate(p) 
+        deallocate(p) 
         
         if (mpiRank == 0) then
             
@@ -156,10 +166,10 @@ module smirnov_HW_3_MPI_Kadane
         
         endif  
             
-		deallocate(maximum_S)                                                                             ! deallocation of all arrays  
+        deallocate(maximum_S)                                                                             ! deallocation of all arrays  
         deallocate(maximum_L)
-		deallocate(maximum_R)
-		deallocate(maximum_B)
+        deallocate(maximum_R)
+        deallocate(maximum_B)
         
         if (mpiRank == 0) then
             
@@ -167,8 +177,10 @@ module smirnov_HW_3_MPI_Kadane
             
         endif
 
+        continue 100
+
         call mpi_finalize(mpiErr)
 
-	end subroutine
+    end subroutine
 
 end module
