@@ -53,6 +53,7 @@ module smirnov_HW_3_MPI_Kadane
         real(8), dimension(:), allocatable :: p                                                           ! array of column inner sums
         real(8) :: maximum, CurrentSum
         
+        integer(4), dimension(2) :: coords
         integer(4), dimension(:), allocatable :: maximum_L, maximum_R, maximum_B                          ! array of left, right, bottom coordinates of submatrixes with maximum sums started at i-th row
         integer(4) :: left, right                                                                         ! coordinates of maximum subarray of p 
         integer(4) :: i, j, m, n, k                                                                       ! indexes; m, n - matrix sizes
@@ -63,12 +64,13 @@ module smirnov_HW_3_MPI_Kadane
         call mpi_comm_size(MPI_COMM_WORLD, mpiSize, mpiErr)                                               ! get number of threads
         call mpi_comm_rank(MPI_COMM_WORLD, mpiRank, mpiErr)                                               ! get this thread rank
         
-        if(a < 0) then                                                                                    ! in case a is fulli negative
+        if(maxval(a) < 0) then                                                                                    
             
-            x1 = minloc(a, dim = 1)
-            y1 = minloc(a, dim = 2)
-            x2 = x1
-            y2 = y1
+            coords = minloc(a)
+            x2 = coords(1)
+            x1 = coords(1)
+            y2 = coords(2)
+            y1 = coords(2)
             
             goto 100
         
@@ -86,7 +88,7 @@ module smirnov_HW_3_MPI_Kadane
             m = n
             n = k
             
-            if(mpiSize > 1)
+            if(mpiSize > 1) then
             
                 call mpi_bcast(b, m*n, MPI_REAL8, 0, MPI_COMM_WORLD, mpiErr)
                 call mpi_bcast(m, 1, MPI_INTEGER4, 0, MPI_COMM_WORLD, mpiErr)
@@ -177,7 +179,7 @@ module smirnov_HW_3_MPI_Kadane
             
         endif
 
-        continue 100
+        100 continue
 
         call mpi_finalize(mpiErr)
 
