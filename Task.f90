@@ -1,4 +1,5 @@
 module Task
+    use mpi
     contains
     
     subroutine GetMaxCoordinates(A, x1, y1, x2, y2)                                                       ! A - input matrix; x1, y1 - lower coordinates of submatrix; x2, y2 - upper coordinates of submatrix
