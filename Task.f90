@@ -18,7 +18,6 @@ module Task
         integer(4) :: left, right                                                                         ! coordinates of maximum subarray of p 
         integer(4) :: i, j, m, n, k                                                                       ! indexes; m, n - matrix sizes
         integer(4) :: mpiErr, mpiSize, mpiRank                                                            ! mpiErr - error at MPI functions, mpiRank - this thread number, mpiSize - number of threads
-        logical :: transp
         
         call mpi_comm_size(MPI_COMM_WORLD, mpiSize, mpiErr)                                               ! get number of threads
         call mpi_comm_rank(MPI_COMM_WORLD, mpiRank, mpiErr)                                               ! get this thread rank
@@ -34,19 +33,6 @@ module Task
 
         m = size(A, dim = 1)
         n = size(A, dim = 2)
-        transp = .false.
-        
-        if (m < n) then                                                                                    ! transpose A if needed
-            allocate(b(n,m))
-            b = transpose(A)
-            k = m
-            m = n
-            n = k
-            transp = .true.   
-        else
-            allocate(b(m,n))
-            b = A            
-        endif
         
         allocate(maximum_S(0:m/mpiSize))                                                                  ! array allocations
         allocate(maximum_L(0:m/mpiSize))
@@ -69,7 +55,7 @@ module Task
                 enddo
                     
                 call Kande(p, left, right, CurrentSum)
-    
+                
                 if (CurrentSum  >=  maximum_S((i)/mpiSize) .or. i + 1 == j) then
                     maximum_S( (i)/mpiSize ) = CurrentSum;
                     maximum_L( (i)/mpiSize ) = left
@@ -100,15 +86,6 @@ module Task
             call mpi_bcast(x2, 1, MPI_INTEGER4, i, MPI_COMM_WORLD, mpiErr)
             call mpi_bcast(y1, 1, MPI_INTEGER4, i, MPI_COMM_WORLD, mpiErr)
             call mpi_bcast(y2, 1, MPI_INTEGER4, i, MPI_COMM_WORLD, mpiErr)
-        endif  
-
-        if(transp) then
-                k = x1
-                x1 = y1
-                y1 = k
-                k = y2
-                y2 = x2
-                x2 = k
         endif
          
         deallocate(maximum_S)                                                                             ! deallocation of all arrays  
