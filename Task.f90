@@ -2,25 +2,24 @@ module Task
     use mpi
     contains
     
-    subroutine GetMaxCoordinates(A, x1, y1, x2, y2)                                                       ! A - input matrix; x1, y1 - lower coordinates of submatrix; x2, y2 - upper coordinates of submatrix
+    subroutine GetMaxCoordinates(A, x1, y1, x2, y2)                     ! A - input matrix; x1, y1 - lower coordinates of submatrix; x2, y2 - upper coordinates of submatrix
 
         real(8), intent(in), dimension(:,:) :: A
         integer(4), intent(out) :: x1, y1, x2, y2
         
-        real(8), dimension(:,:), allocatable :: b                                                         ! auxiliary matrix
-        real(8), dimension(:), allocatable :: maximum_S                                                   ! array of maximum sums started at i-th row 
-        real(8), dimension(:), allocatable :: Global_maximum_S                                            ! array of maximum sums calculated by i-th thread
-        real(8), dimension(:), allocatable :: p                                                           ! array of column inner sums
+        real(8), dimension(:), allocatable :: maximum_S                 ! array of maximum sums started at i-th row 
+        real(8), dimension(:), allocatable :: Global_maximum_S          ! array of maximum sums calculated by i-th thread
+        real(8), dimension(size(A, dim = 1)):: p                         ! array of column inner sums
         real(8) :: maximum, CurrentSum
         
         integer(4), dimension(2) :: coords
-        integer(4), dimension(:), allocatable :: maximum_L, maximum_R, maximum_B                          ! array of left, right, bottom coordinates of submatrixes with maximum sums started at i-th row
-        integer(4) :: left, right                                                                         ! coordinates of maximum subarray of p 
-        integer(4) :: i, j, m, n, k                                                                       ! indexes; m, n - matrix sizes
-        integer(4) :: mpiErr, mpiSize, mpiRank                                                            ! mpiErr - error at MPI functions, mpiRank - this thread number, mpiSize - number of threads
+        integer(4), dimension(:), allocatable :: maximum_L, maximum_R, maximum_B ! array of left, right, bottom coordinates of submatrixes with maximum sums started at i-th row
+        integer(4) :: left, right                                       ! coordinates of maximum subarray of p 
+        integer(4) :: i, j, m, n, k                                     ! indexes; m, n - matrix sizes
+        integer(4) :: mpiErr, mpiSize, mpiRank                          ! mpiErr - error at MPI functions, mpiRank - this thread number, mpiSize - number of threads
         
-        call mpi_comm_size(MPI_COMM_WORLD, mpiSize, mpiErr)                                               ! get number of threads
-        call mpi_comm_rank(MPI_COMM_WORLD, mpiRank, mpiErr)                                               ! get this thread rank
+        call mpi_comm_size(MPI_COMM_WORLD, mpiSize, mpiErr)             ! get number of threads
+        call mpi_comm_rank(MPI_COMM_WORLD, mpiRank, mpiErr)             ! get this thread rank
         
         if(maxval(A) < 0) then
             coords = maxloc(A)
@@ -34,25 +33,21 @@ module Task
         m = size(A, dim = 1)
         n = size(A, dim = 2)
         
-        allocate(maximum_S(0:m/mpiSize))                                                                  ! array allocations
-        allocate(maximum_L(0:m/mpiSize))
-        allocate(maximum_R(0:m/mpiSize))
-        allocate(maximum_B(0:m/mpiSize))
+        allocate(maximum_S(0:n/mpiSize))                                ! array allocations
+        allocate(maximum_L(0:n/mpiSize))
+        allocate(maximum_R(0:n/mpiSize))
+        allocate(maximum_B(0:n/mpiSize))
                 
         if (mpiRank == 0) then
             allocate(Global_maximum_S(0:mpiSize-1))
         endif
         
         maximum_S = -1
-                
-        allocate(p(n))
-        
-        do i = mpiRank, m-1, mpiSize                                                                      ! main body of algorythm
+                    
+        do i = mpiRank, n-1, mpiSize                                    ! main body of algorythm
             p = 0
-            do j = i + 1, m
-                do k = 1,n
-                    p(k) = p(k) + b(j, k)
-                enddo
+            do j = i + 1, n
+                p = p + A(:, j)
                     
                 call Kande(p, left, right, CurrentSum)
                 
@@ -65,17 +60,15 @@ module Task
             enddo
         enddo
         
-        x1 = maxloc(maximum_S, dim = 1) - 1                                                               ! find coords of maximum sum in this thread
-        x2 = maximum_B(x1)
-        y2 = maximum_R(x1)
-        y1 = maximum_L(x1)
-        x1 = mpiSize*x1 + mpiRank + 1
+        y1 = maxloc(maximum_S, dim = 1) - 1
+        x1 = maximum_L(y1)
+        y2 = maximum_B(y1)
+        x2 = maximum_R(y1)
+        y1 = mpiSize*y1 + mpiRank + 1
         maximum = maxval(maximum_S(:))                                                                    ! find maximum sum in this thread
         
         call mpi_gather(maximum, 1, MPI_REAL8, Global_maximum_S, 1, MPI_REAL8, 0, MPI_COMM_WORLD, mpiErr) ! create array of all maximums
-        
-        deallocate(p) 
-        
+                
         if (mpiRank == 0) then
             i = maxloc(Global_maximum_S(0:mpiSize), dim = 1) - 1                                          ! find thread with maximum sum
         endif
@@ -99,13 +92,14 @@ module Task
 
     end subroutine
 
-    subroutine Kande(a, x1, x2, summary)                                                                ! 1D Kadane algorythm
+    subroutine Kande(a, x1, x2, summary)                                ! 1D Kadane algorythm
     
         real(8), intent(in), dimension(:) :: a
-        integer(4), intent(out) :: x1, x2    
         real(8), intent(out) :: summary
-        integer(4) :: i, leftIndex, n, u
         real(8) :: Max_End, possible_1, possible_2
+        
+        integer(4) :: i, leftIndex, n
+        integer(4), intent(out) :: x1, x2    
 
         n = size(a)
 
